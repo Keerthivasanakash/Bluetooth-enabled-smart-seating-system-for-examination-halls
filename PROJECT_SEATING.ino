@@ -8,35 +8,34 @@ SoftwareSerial BT(8, 9); // RX, TX
 #define MAX_STUDENTS 60
 
 int students[MAX_STUDENTS];
-int totalStudents = 42;
+int totalStudents = 0;
 
-int halls = 2;
-int benches = 20;
-int seats = 2;
+int halls = 0;
+int benches = 0;   // benches PER hall
+int seats = 0;     // seats PER bench
 
 bool systemReady = false;
 String input = "";
 
-// -------- SETUP --------
+// ---------------- SETUP ----------------
 void setup() {
   lcd.init();
   lcd.backlight();
   BT.begin(9600);
   Serial.begin(9600);
 
-  randomSeed(analogRead(A0));
-
-  lcd.print("Seat System");
+  lcd.print("SEATING SYSTEM");
   lcd.setCursor(0, 1);
-  lcd.print("Waiting Admin");
+  lcd.print("WAITING FOR I/P");
 }
 
-// -------- MAIN LOOP --------
+// ---------------- LOOP ----------------
 void loop() {
   while (BT.available()) {
     char c = BT.read();
     if (c == '\n' || c == '\r') {
       input.trim();
+      input.toUpperCase();
       processCommand(input);
       input = "";
     } else {
@@ -45,9 +44,8 @@ void loop() {
   }
 }
 
-// -------- PROCESS COMMAND --------
+// ---------------- COMMAND HANDLER ----------------
 void processCommand(String cmd) {
-  cmd.toUpperCase();
 
   if (cmd.startsWith("SET:")) {
     configureSystem(cmd);
@@ -55,7 +53,7 @@ void processCommand(String cmd) {
   else if (cmd.startsWith("ROLL:")) {
     if (!systemReady) {
       lcd.clear();
-      lcd.print("System Not Set");
+      lcd.print("SYSTEM NOT SET");
       delay(1500);
       resetLCD();
       return;
@@ -65,8 +63,9 @@ void processCommand(String cmd) {
   }
 }
 
-// -------- CONFIGURATION --------
+// ---------------- CONFIGURATION ----------------
 void configureSystem(String data) {
+
   int startRoll = getValue(data, "START");
   int endRoll   = getValue(data, "END");
   halls   = getValue(data, "HALLS");
@@ -75,49 +74,37 @@ void configureSystem(String data) {
 
   totalStudents = endRoll - startRoll + 1;
 
-  if (totalStudents > MAX_STUDENTS) {
+  if (totalStudents <= 0 || totalStudents > MAX_STUDENTS) {
     lcd.clear();
-    lcd.print("Too Many Stud");
+    lcd.print("INVALID COUNT");
     return;
   }
 
   int capacity = halls * benches * seats;
   if (capacity < totalStudents) {
     lcd.clear();
-    lcd.print("Capacity Low");
+    lcd.print("CAPACITY LOW");
     return;
   }
 
-  // Generate roll list
+  // Generate roll numbers in ORDER
   for (int i = 0; i < totalStudents; i++) {
     students[i] = startRoll + i;
   }
 
-  shuffleStudents();
-
   systemReady = true;
 
   lcd.clear();
-  lcd.print("Seating Ready");
+  lcd.print("SEATING READY");
   lcd.setCursor(0, 1);
-  lcd.print("Students:");
+  lcd.print("STUDENTS:");
   lcd.print(totalStudents);
 }
 
-// -------- SHUFFLE --------
-void shuffleStudents() {
-  for (int i = totalStudents - 1; i > 0; i--) {
-    int j = random(0, i + 1);
-    int temp = students[i];
-    students[i] = students[j];
-    students[j] = temp;
-  }
-}
-
-// -------- SHOW SEAT --------
+// ---------------- SHOW SEAT ----------------
 void showSeat(int roll) {
-  int index = -1;
 
+  int index = -1;
   for (int i = 0; i < totalStudents; i++) {
     if (students[i] == roll) {
       index = i;
@@ -127,15 +114,17 @@ void showSeat(int roll) {
 
   if (index == -1) {
     lcd.clear();
-    lcd.print("Invalid Roll");
+    lcd.print("INVALID ROLL NO");
     delay(1500);
     resetLCD();
     return;
   }
 
-  int perHall = benches * seats;
-  int hall  = (index / perHall) + 1;
-  int bench = ((index / seats) % benches) + 1;
+  // ⭐ CORRECT LOGIC (Bench resets per hall)
+  int studentsPerHall = benches * seats;
+
+  int hall  = (index / studentsPerHall) + 1;
+  int bench = ((index % studentsPerHall) / seats) + 1;
   int seat  = (index % seats) + 1;
 
   lcd.clear();
@@ -150,7 +139,7 @@ void showSeat(int roll) {
   lcd.print(seat);
 }
 
-// -------- UTILITIES --------
+// ---------------- UTILITIES ----------------
 int getValue(String data, String key) {
   int idx = data.indexOf(key + "=");
   if (idx == -1) return 0;
@@ -162,6 +151,5 @@ int getValue(String data, String key) {
 
 void resetLCD() {
   lcd.clear();
-  lcd.print("Enter Roll No");
-
+  lcd.print("ENTER ROLL NO");
 }
